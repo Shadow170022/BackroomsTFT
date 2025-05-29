@@ -1,0 +1,24 @@
+# Carpetas generadas automáticamente por Unreal
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vscode/
+.vs/
+*.opensdf
+*.sdf
+*.sou
+
+# Archivos del editor
+*.user
+*.userprefs
+*.log
+
+# Configuración temporal y de cache
+*.pdb
+*.opendb
+*.opensdf
+
+# Configs locales
+Config/DefaultEditorUserSettings.ini
+Config/DefaultEditorPerProjectUserSettings.ini
