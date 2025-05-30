@@ -32,7 +32,7 @@ protected:
     virtual void BeginPlay() override;
 
 private:
-    // Tus propiedades editables
+    // propiedades editables
     UPROPERTY(EditAnywhere, Category = "Maze Config")
     int32 Width = 10;
 
@@ -40,20 +40,45 @@ private:
     int32 Height = 10;
 
     UPROPERTY(EditAnywhere, Category = "Maze Config")
-    float RoomXSize = 600.f;
+    float RoomXSize = 750.f;
 
     UPROPERTY(EditAnywhere, Category = "Maze Config")
-    float RoomZSize = 600.f;
+    float RoomZSize = 750.f;
+
+    UPROPERTY(EditAnywhere, Category = "Maze Prefabs")
+    TArray<TSubclassOf<AActor>> RoomEntryPrefabs;
+
+    UPROPERTY(EditAnywhere, Category = "Maze Prefabs")
+    TArray<TSubclassOf<AActor>> RoomExitPrefabs;
+
+    UPROPERTY(EditAnywhere, Category = "Maze Prefabs")
+    TArray<TSubclassOf<AActor>> RoomCornerPrefabs;
+
+    UPROPERTY(EditAnywhere, Category = "Maze Prefabs")
+    TArray<TSubclassOf<AActor>> RoomBorderPrefabs;
+
+    UPROPERTY(EditAnywhere, Category = "Maze Prefabs")
+    TArray<TSubclassOf<AActor>> RoomInteriorPrefabs;
 
     UPROPERTY(EditAnywhere, Category = "Maze Config")
     TArray<TSubclassOf<AActor>> RoomPrefabs;
 
-    // Estructuras internas (no expuestas)
+    // Internos
     TArray<bool> Visited;
     TMap<FIntPoint, AActor*> Rooms;
 
-    // Tus funciones
+    // Entrada / Salida
+    FMazeCell EntryCell;
+    FMazeCell ExitCell;
+
+    // Helpers
+    FMazeCell PickRandomBorderCell() const;
+
+    // Flujo de generación
     void GenerateMaze();
     TArray<FMazeCell> GetUnvisitedNeighbors(const FMazeCell& Cell) const;
-    void CreateRoom(const FMazeCell& Cell);
+
+    // Instanciación de salas
+    void CreateRoom(const FMazeCell& Cell, bool bIsEntryOrNormal = false, bool bIsExit = false);
+    void MarkExit(const FMazeCell& Cell);
 };

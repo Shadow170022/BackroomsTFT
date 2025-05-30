@@ -25,6 +25,11 @@ void AMazeGenerator::BeginPlay()
 		return;
 	}
 
+	EntryCell = PickRandomBorderCell();
+	do {
+		ExitCell = PickRandomBorderCell();
+	} while (ExitCell.X == EntryCell.X && ExitCell.Y == EntryCell.Y);
+
 	// Inicializar matriz de visitas
 	Visited.Init(false, Width * Height);
 
@@ -41,38 +46,85 @@ void AMazeGenerator::BeginPlay()
 void AMazeGenerator::GenerateMaze()
 {
 	TArray<FMazeCell> Stack;
-	FMazeCell Current(0, 0);
+	FMazeCell Current = EntryCell;
 
-	// Marcar y crear la primera sala
-	Visited[0 + 0 * Width] = true;
-	CreateRoom(Current);
+	// Fase 0: Iniciar en EntryCell
+	Visited[Current.X + Current.Y * Width] = true;
+	CreateRoom(Current, /*bIsEntryOrNormal=*/true, /*bIsExit=*/false);
 	Stack.Push(Current);
 
-	// DFS con backtracking
+	// Fase 1: DFS dirigido hasta ExitCell
+	bool bReachedExit = false;
+	while (!bReachedExit && Stack.Num() > 0)
+	{
+		Current = Stack.Last();
+		TArray<FMazeCell> Neighbors = GetUnvisitedNeighbors(Current);
+		if (Neighbors.Num() > 0)
+		{
+			FMazeCell Next = Neighbors[UKismetMathLibrary::RandomIntegerInRange(0, Neighbors.Num() - 1)];
+			Visited[Next.X + Next.Y * Width] = true;
+			bool bIsExit = (Next.X == ExitCell.X && Next.Y == ExitCell.Y);
+			CreateRoom(Next, /*bIsEntryOrNormal=*/false, bIsExit);
+			Stack.Push(Next);
+
+			if (bIsExit)
+			{
+				bReachedExit = true;
+				MarkExit(Next);
+			}
+		}
+		else
+		{
+			Stack.Pop();
+		}
+	}
+
+	// Fase 2: Rellenar el resto con backtracking clásico
 	while (Stack.Num() > 0)
 	{
 		Current = Stack.Last();
 		TArray<FMazeCell> Neighbors = GetUnvisitedNeighbors(Current);
-
 		if (Neighbors.Num() > 0)
 		{
-			// Escoger uno al azar
-			int32 Idx = UKismetMathLibrary::RandomIntegerInRange(0, Neighbors.Num() - 1);
-			FMazeCell Next = Neighbors[Idx];
-
-			// Marcar y crear
+			FMazeCell Next = Neighbors[UKismetMathLibrary::RandomIntegerInRange(0, Neighbors.Num() - 1)];
 			Visited[Next.X + Next.Y * Width] = true;
-			CreateRoom(Next);
-
+			CreateRoom(Next, /*bIsEntryOrNormal=*/false, /*bIsExit=*/false);
 			Stack.Push(Next);
 		}
 		else
 		{
-			// Retroceder
 			Stack.Pop();
 		}
 	}
 }
+
+FMazeCell AMazeGenerator::PickRandomBorderCell() const
+{
+	// 0 = izquierda, 1 = derecha, 2 = abajo, 3 = arriba
+	int side = UKismetMathLibrary::RandomIntegerInRange(0, 3);
+	int x = 0, y = 0;
+	switch (side)
+	{
+	case 0: // izquierda
+		x = 0;
+		y = UKismetMathLibrary::RandomIntegerInRange(0, Height - 1);
+		break;
+	case 1: // derecha
+		x = Width - 1;
+		y = UKismetMathLibrary::RandomIntegerInRange(0, Height - 1);
+		break;
+	case 2: // abajo
+		x = UKismetMathLibrary::RandomIntegerInRange(0, Width - 1);
+		y = 0;
+		break;
+	case 3: // arriba
+		x = UKismetMathLibrary::RandomIntegerInRange(0, Width - 1);
+		y = Height - 1;
+		break;
+	}
+	return FMazeCell(x, y);
+}
+
 
 TArray<FMazeCell> AMazeGenerator::GetUnvisitedNeighbors(const FMazeCell& Cell) const
 {
@@ -101,30 +153,74 @@ TArray<FMazeCell> AMazeGenerator::GetUnvisitedNeighbors(const FMazeCell& Cell) c
 	return Result;
 }
 
-void AMazeGenerator::CreateRoom(const FMazeCell& Cell)
+void AMazeGenerator::CreateRoom(const FMazeCell& Cell, bool bIsEntryOrNormal, bool bIsExit)
 {
 	FIntPoint Key(Cell.X, Cell.Y);
 	if (Rooms.Contains(Key))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Room %d,%d already exists"), Cell.X, Cell.Y);
 		return;
 	}
 
-	// Elegir prefab aleatorio
-	int32 PrefabIdx = UKismetMathLibrary::RandomIntegerInRange(0, RoomPrefabs.Num() - 1);
-	TSubclassOf<AActor> RoomClass = RoomPrefabs[PrefabIdx];
-	if (!RoomClass) return;
+	// Determinar posición relativa al borde
+	bool bIsLeft = (Cell.X == 0);
+	bool bIsRight = (Cell.X == Width - 1);
+	bool bIsBottom = (Cell.Y == 0);
+	bool bIsTop = (Cell.Y == Height - 1);
 
-	// Calcular posición
-	FVector Location(
-		Cell.X * RoomXSize,
-		Cell.Y * RoomZSize,
-		0.f
-	);
+	int BorderCount = (int)bIsLeft + (int)bIsRight + (int)bIsBottom + (int)bIsTop;
+	bool bIsCorner = (BorderCount == 2);
+	bool bIsBorder = (BorderCount == 1);
+	bool bIsInterior = (BorderCount == 0);
+
+	// Escoger el array apropiado
+	TArray<TSubclassOf<AActor>>* PrefabArray = nullptr;
+
+	// Entrada (EntryCell) y Salida (ExitCell)
+	if (Cell.X == EntryCell.X && Cell.Y == EntryCell.Y)
+	{
+		PrefabArray = &RoomEntryPrefabs;
+	}
+	else if (bIsExit)
+	{
+		PrefabArray = &RoomExitPrefabs;
+	}
+	// Esquina
+	else if (bIsCorner)
+	{
+		PrefabArray = &RoomCornerPrefabs;
+	}
+	// Borde
+	else if (bIsBorder)
+	{
+		PrefabArray = &RoomBorderPrefabs;
+	}
+	// Interior
+	else if (bIsInterior)
+	{
+		PrefabArray = &RoomInteriorPrefabs;
+	}
+
+	// Si no hay prefabs definidos para esta categoría, abortar
+	if (!PrefabArray || PrefabArray->Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No prefabs assigned for this room type at %d,%d"), Cell.X, Cell.Y);
+		return;
+	}
+
+	// Seleccionar uno al azar
+	int32 Idx = FMath::RandRange(0, PrefabArray->Num() - 1);
+	TSubclassOf<AActor> RoomClass = (*PrefabArray)[Idx];
+	if (!RoomClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Null prefab in array at index %d"), Idx);
+		return;
+	}
+
+	// Instanciar en el mundo
+	FVector Location(Cell.X * RoomXSize, Cell.Y * RoomZSize, 0.f);
 	FActorSpawnParameters Params;
 	Params.Owner = this;
 
-	// Instanciar actor
 	AActor* RoomActor = GetWorld()->SpawnActor<AActor>(RoomClass, Location, FRotator::ZeroRotator, Params);
 	if (RoomActor)
 	{
@@ -134,4 +230,17 @@ void AMazeGenerator::CreateRoom(const FMazeCell& Cell)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to spawn room at %d,%d"), Cell.X, Cell.Y);
 	}
+}
+
+
+void AMazeGenerator::MarkExit(const FMazeCell& Cell)
+{
+	// Aquí puedes, por ejemplo, instanciar un actor de puerta o efecto de salida:
+	FVector Location(
+		Cell.X * RoomXSize,
+		Cell.Y * RoomZSize,
+		0.f
+	);
+	// GetWorld()->SpawnActor<AYourExitActor>(ExitActorClass, Location, FRotator::ZeroRotator);
+	UE_LOG(LogTemp, Log, TEXT("Exit placed at %d,%d"), Cell.X, Cell.Y);
 }
